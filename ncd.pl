@@ -92,13 +92,16 @@ sub read_history {
     return uniq(@p);
 }
 
-# Push $target then $cwd on top of the history and drop duplicates.  Both the
-# directory we leave and the one we enter are recorded -- the old version only
-# ever recorded the former.  Vanished entries are kept unless NCDautoremove is
-# set: a directory may be temporarily gone (unmounted share, detached volume).
+# Promote the given directories to the top of the history, most recent first,
+# and drop duplicates.  Vanished entries are kept unless NCDautoremove is set:
+# a directory may be temporarily gone (unmounted share, detached volume).
+#
+# A directory is promoted when the user *leaves* it, because that is the only
+# reliable evidence they accepted it.  A directory we merely offered them is
+# not promoted: see finish().
 sub write_history {
-    my ($target, $cwd) = @_;
-    my @new = uniq($target, $cwd, @hist);
+    my @promote = @_;
+    my @new = uniq(@promote, @hist);
     @new = grep { -d $_ } @new if $AUTORM;
     @new = @new[0 .. $MAXHIST - 1] if $MAXHIST && @new > $MAXHIST;
     open(my $fh, '>', $HISTFILE) or die "ncd: cannot write $HISTFILE: $!\n";
@@ -216,10 +219,16 @@ sub pick {
 
 # ------------------------------------------------------------------ output
 
+# $promote lists the directories to push to the top of the history, or is
+# empty to leave the history untouched.  It is *not* the target: offering a
+# directory is not the same as the user accepting it.  On a rotation step the
+# previous answer was just rejected, so nothing is promoted at all -- otherwise
+# the rejected candidates climb the history and are offered first next time,
+# in reverse order of rejection.
 sub finish {
-    my ($target, $cwd, $query, $idx, $cands) = @_;
+    my ($target, $promote, $query, $idx, $cands) = @_;
     $target = norm($target);
-    write_history($target, $cwd);
+    write_history(@$promote) if @$promote;
     write_mem($query, $idx, $cands);
     if ($VERBOSE && $cands && @$cands) {
         info "candidates:\n";
@@ -265,7 +274,7 @@ if ($swaplast) {
     $idx = $#ring if $idx > $#ring;
     $idx = 0      if $idx < 0;
     # A swap is not a search: forget any pending rotation.
-    finish($ring[$idx], $cwd, '', 0, []);
+    finish($ring[$idx], [$cwd], '', 0, []);
 }
 
 $query = $ENV{HOME} unless defined $query && length $query;
@@ -273,14 +282,25 @@ $query = $ENV{HOME} unless defined $query && length $query;
 # Smart case, decided once for the whole run.
 $CASESENS = ($query =~ /[[:upper:]]/) ? 1 : 0;
 
-# An existing directory always wins over a history lookup.
+# An existing directory always wins over a history lookup.  This is the only
+# place the target itself is promoted: the user named it explicitly, and it may
+# be a directory the history has never seen.
 if (-d $query) {
-    finish(norm(abs_path($query)), $cwd, '', 0, []);
+    my $target = norm(abs_path($query));
+    finish($target, [ $target, $cwd ], '', 0, []);
 }
 
 my ($lastq, $lastidx, @cached) = read_mem();
 my (@cand, $idx);
-my $rotating = (length($lastq) && $lastq eq $query && @cached) ? 1 : 0;
+# A rotation step is the same query typed again *while still standing on the
+# previous answer*.  If the user has moved on since, that answer was accepted
+# and this is a fresh search.
+my $rotating =
+    (   length($lastq)
+     && $lastq eq $query
+     && @cached
+     && $lastidx <= $#cached
+     && $cwd eq $cached[$lastidx]) ? 1 : 0;
 
 if ($rotating) {
     # Same query repeated: rotate over the cached list rather than recomputing
@@ -311,4 +331,6 @@ if ($idx < 0) {
     exit 1;
 }
 
-finish($cand[$idx], $cwd, $query, $idx, \@cand);
+# On a rotation step the history is left alone: $cwd is the candidate the user
+# has just rejected, and promoting it would be exactly backwards.
+finish($cand[$idx], ($rotating ? [] : [$cwd]), $query, $idx, \@cand);

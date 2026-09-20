@@ -49,9 +49,10 @@ Flux principal :
 2. `-SWAPLAST n` → anneau `($cwd, historique sans $cwd)`, index `n-1` borné. n=2 ≡ `cd -`.
    Remet la rotation à zéro.
 3. Fragment qui est un répertoire réel → `abs_path`, prioritaire sur l'historique.
-4. Requête identique à `.mem` L1 → rotation sur la **liste en cache**, conservée
-   telle quelle (entrées mortes incluses) pour que `lastidx` reste aligné.
-   Sinon `candidates()` et idx=0.
+4. Requête identique à `.mem` L1 **et** cwd encore égal à la réponse précédente
+   → rotation sur la **liste en cache**, conservée telle quelle (entrées mortes
+   incluses) pour que `lastidx` reste aligné. Sinon `candidates()` et idx=0 :
+   si l'utilisateur a bougé entre-temps, la réponse précédente a été acceptée.
 5. `pick()` avance jusqu'au premier candidat vivant et différent du cwd, sur
    **exactement un cycle**. Cache entièrement périmée → nouvelle recherche.
 6. `finish()` — `write_history()`, `write_mem()`, `print $target`.
@@ -65,7 +66,7 @@ Fonctions :
 | `candidates($q)` | découpe chaque chemin en composants, fenêtre de `k` composants (`k` = segments de la requête, donc `ncd a/b` marche), tronque **juste après** le composant qui matche, `%best` dédoublonne. Tri : tier, puis récence, puis longueur |
 | `existing` | filtre les répertoires disparus (anneau `-SWAPLAST` uniquement), un message stderr par entrée |
 | `pick($idx,$cwd,@cand)` | avance sur **au plus un tour complet** ; renvoie le 1er candidat vivant ≠ cwd, à défaut le cwd, sinon `-1`. C'est le garde-fou anti-boucle |
-| `write_history` | pousse destination **puis** origine en tête, dédoublonne ; purge si `NCDautoremove`, plafonne si `NCDmax` |
+| `write_history(@promote)` | pousse les répertoires donnés en tête, dédoublonne ; purge si `NCDautoremove`, plafonne si `NCDmax` |
 | `read_mem`/`write_mem` | cache de rotation |
 
 ### bashrc.inc — CORE
@@ -77,12 +78,13 @@ Arguments quotés (`"$@"`). Si la sortie est vide, pas de `cd`.
 
 Tests `Test::More` en bac à sable (`tempdir` + `NCDfile`/`HOME` détournés).
 Lancer : `prove -v t/ncd.t`.
-57 tests. Couvre : priorité des tiers, troncature au bon composant, rotation
+65 tests. Couvre : priorité des tiers, troncature au bon composant, rotation
 (ordre, wrap, reset par une autre requête, reset par `ncs`), saut du cwd,
 `ncd .` / `ncd ..`, métacaractères regex (`a+b`, `x.y`), espaces, requête
 multi-segments, smart case (minuscules → insensible, majuscule → sensible,
 échec assumé), chemins ne différant que par la casse (skippés sur FS
-insensible), mise à jour de l'historique, répertoires disparus (écartés,
+insensible), promotion à la sortie et non-promotion des candidats rejetés,
+mise à jour de l'historique, répertoires disparus (écartés,
 conservés par défaut, purgés avec `NCDautoremove`, sans perturber la rotation),
 cycle borné (tous les candidats morts, cache entièrement périmée),
 `NCDmax` défini/illimité, `-SWAPLAST` (toggle, `n`, clamp), sans argument,
@@ -103,8 +105,11 @@ historique vide.
   `pick`) : jamais de `while` sur une condition qui peut ne jamais se réaliser.
 - L'historique n'est jamais amputé sans que l'utilisateur l'ait demandé
   (`NCDautoremove`, `NCDmax`) : par défaut il ne fait que croître.
-- Destination **et** origine entrent dans l'historique (sinon un répertoire atteint
-  puis jamais quitté via `ncd` resterait invisible).
+- **Un répertoire est promu quand on le quitte**, jamais quand on l'atteint : c'est
+  la seule preuve fiable qu'il a été accepté. Pendant une rotation, l'historique
+  n'est pas touché du tout — le cwd y est un candidat que l'utilisateur vient de
+  rejeter. Seule exception : `ncd <répertoire réel>`, où la cible est promue, car
+  c'est ainsi qu'un répertoire inconnu de l'historique y entre.
 
 ## Pièges corrigés (ne pas réintroduire)
 
@@ -113,5 +118,8 @@ historique vide.
 - `.*` gourmand pour tronquer → on atterrit sur `…/ncdtest` au lieu de `…/ncd`.
 - Filtrer les entrées mortes de la liste en cache → `lastidx` se désaligne et la
   rotation ressert deux fois le même répertoire.
+- Promouvoir la cible à chaque appel → après `ncd a` répété 5 fois, les 4 rejets
+  remontent en tête, **dans l'ordre inverse de leur rejet**, et sont proposés en
+  premier à la recherche suivante.
 - Recalculer les candidats entre deux appels d'une même requête → rotation qui piétine.
 - `$a` comme variable globale (réservée à `sort`) et interpolée brute en regex.

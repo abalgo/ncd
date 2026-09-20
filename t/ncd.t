@@ -201,7 +201,7 @@ SKIP: {
     seed('work/Proj', 'work/proj');
     my @both;
     push @both, ncd('home', 'proj');
-    push @both, ncd('home', 'proj');
+    push @both, ncd($both[0], 'proj');
     is_deeply([ sort @both ], [ 'work/Proj', 'work/proj' ],
         'a case-insensitive query rotates over both twins');
 
@@ -236,9 +236,48 @@ is(ncd('home', 'with space'), 'work/with space', 'paths with spaces work');
 seed('work/archive/ncd', 'work/alpha');
 ncd('home', 'ncd');
 my @h = history();
-is($h[0], 'work/archive/ncd', 'the destination is recorded first');
-is($h[1], 'home',             'the directory we left is recorded second');
+is($h[0], 'home', 'the directory we left is promoted');
 is(scalar(grep { $_ eq 'work/archive/ncd' } @h), 1, 'no duplicate entry');
+
+# A directory named explicitly is promoted: that is how one the history has
+# never seen gets in.
+mkdirs('work/brandnew');
+seed('work/alpha');
+ncd('home', "$ROOT/work/brandnew");
+is((history())[0], 'work/brandnew',
+    'a directory given explicitly enters the history at the top');
+
+# ------------------------------- rejected candidates must not be promoted
+
+# Five `ncd app` in a row means the first four answers were rejected.
+mkdirs("work/a$_/app") for 1 .. 5;
+seed(map { "work/a$_/app" } 1 .. 5);
+my $at = 'home';
+$at = ncd($at, 'app') for 1 .. 5;
+is($at, 'work/a5/app', 'five repeats walk down to the fifth match');
+is_deeply([ history() ],
+    [ 'home', map { "work/a$_/app" } 1 .. 5 ],
+    'the four rejected candidates keep their original order, none promoted');
+
+# Settling on a5 and then leaving it (here with ncs) promotes a5 alone.
+ncd('work/a5/app', '-SWAPLAST');
+my @after = history();
+is($after[0], 'work/a5/app', 'the accepted directory is promoted when left');
+is_deeply([ @after[ 2 .. 5 ] ], [ map { "work/a$_/app" } 1 .. 4 ],
+    'the rejected ones stay below, still in their original order');
+
+# ... so the next search offers the accepted one first.
+is(ncd('home', 'app'), 'work/a5/app',
+    'the next search offers the directory that was actually accepted');
+
+# -------------------------- a repeat only rotates if we are still standing there
+
+seed('work/a1/app', 'work/a2/app');
+is(ncd('home', 'app'), 'work/a1/app', 'first answer');
+is(ncd('home', 'app'), 'work/a1/app',
+    'the user moved away in between: same query, fresh search, not a rotation');
+is(ncd('work/a1/app', 'app'), 'work/a2/app',
+    'but standing on the answer, the same query does rotate');
 
 # --------------------------------------------------- vanished directories
 
@@ -270,7 +309,7 @@ make_path("$ROOT/work/ncd_gone");
 seed('work/projects/ncd', 'work/ncd_gone', 'work/archive/ncd');
 rmdir "$ROOT/work/ncd_gone";
 is(ncd('home', 'ncd'), 'work/projects/ncd', 'rotation with a stale entry: 1st');
-is(ncd('home', 'ncd'), 'work/archive/ncd',
+is(ncd('work/projects/ncd', 'ncd'), 'work/archive/ncd',
     'the stale entry is skipped, the rotation goes straight to the next one');
 
 # the rotation must never spin: one full cycle then stop
