@@ -77,11 +77,12 @@ Arguments quotés (`"$@"`). Si la sortie est vide, pas de `cd`.
 
 Tests `Test::More` en bac à sable (`tempdir` + `NCDfile`/`HOME` détournés).
 Lancer : `prove -v t/ncd.t`.
-52 tests. Couvre : priorité des tiers, troncature au bon composant, rotation
+57 tests. Couvre : priorité des tiers, troncature au bon composant, rotation
 (ordre, wrap, reset par une autre requête, reset par `ncs`), saut du cwd,
 `ncd .` / `ncd ..`, métacaractères regex (`a+b`, `x.y`), espaces, requête
 multi-segments, smart case (minuscules → insensible, majuscule → sensible,
-échec assumé), mise à jour de l'historique, répertoires disparus (écartés,
+échec assumé), chemins ne différant que par la casse (skippés sur FS
+insensible), mise à jour de l'historique, répertoires disparus (écartés,
 conservés par défaut, purgés avec `NCDautoremove`, sans perturber la rotation),
 cycle borné (tous les candidats morts, cache entièrement périmée),
 `NCDmax` défini/illimité, `-SWAPLAST` (toggle, `n`, clamp), sans argument,
@@ -92,6 +93,9 @@ historique vide.
 - `ncd.pl` n'écrit **que** le chemin cible sur stdout, jamais de diagnostic.
 - Aucune regex n'est construite à partir d'un chemin ou d'une requête sans `\Q…\E`.
 - Chemins normalisés partout — jamais de comparaison sur une ligne brute du fichier.
+- Toute comparaison d'**identité** de chemin est sensible à la casse (`uniq`, clés
+  `%best`, `ne $cwd`) : sous Linux, `/a/Proj` et `/a/proj` sont deux répertoires.
+  Seul `tier()` replie la casse, et seulement pour le match flou.
 - La rotation s'appuie sur le cache `.mem`, pas sur l'historique (qui bouge à chaque appel).
 - Tout parcours de la liste de candidats est borné à un cycle (`for (1 .. $n)` dans
   `pick`) : jamais de `while` sur une condition qui peut ne jamais se réaliser.

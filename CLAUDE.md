@@ -18,9 +18,22 @@ Voir `PROJECT_MAP.md` pour l'architecture détaillée (ne pas la dupliquer ici).
 ## Commandes
 
 ```bash
-prove -v t/ncd.t      # suite complète (35 tests)
+prove -v t/ncd.t      # suite complète
 perl -c ncd.pl        # contrôle de syntaxe
 ```
+
+Cinq tests portent sur deux répertoires ne différant que par la casse. Ils sont
+skippés sur un FS insensible (NTFS, macOS par défaut) — jamais supprimés, le
+script doit gérer ce cas sous Linux. Pour les exécuter sous Windows :
+
+```bash
+fsutil file setCaseSensitiveInfo <dir> enable   # cmd/PowerShell
+TMPDIR=/c/chemin/vers/<dir> prove -v t/ncd.t
+```
+
+Un run qui affiche `# skip` sur ces tests ne vaut pas validation : avant de
+toucher à `tier()`, `uniq()` ou aux comparaisons de chemins, lancer la suite
+au moins une fois sur un FS sensible à la casse.
 
 Les tests s'exécutent en bac à sable (`tempdir`, `NCDfile`/`HOME` détournés) : ils ne
 touchent jamais le `~/.ncdpath` réel. Ne jamais écrire de test qui s'en écarte.

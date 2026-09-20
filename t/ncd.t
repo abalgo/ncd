@@ -30,6 +30,18 @@ $ENV{HOME}     = $HOME;
 
 sub mkdirs { make_path("$ROOT/$_") for @_; }
 
+# Two directories differing only by case can coexist on ext4 but not on NTFS
+# or on a default macOS volume.  The tests that need them are skipped there,
+# never dropped: ncd.pl itself must handle them, and does.
+# To run them on Windows, point TMPDIR at a case-sensitive directory:
+#     fsutil file setCaseSensitiveInfo <dir> enable
+#     TMPDIR=/c/path/to/<dir> prove -v t/ncd.t
+my $CASEFS = do {
+    make_path("$ROOT/casechk/Xx");
+    my $insensitive = -d "$ROOT/casechk/xX" ? 1 : 0;
+    $insensitive ? 0 : 1;
+};
+
 # Seed the history file, most recent first.
 sub seed {
     open(my $fh, '>', $HIST) or die $!;
@@ -169,6 +181,37 @@ is(ncd('home', 'Upper'), 'Upper',
 seed('work/NCD_upper');
 is(ncd('home', 'upper'), 'work/NCD_upper',
     'the same fragment in lower case does match it');
+
+# ------------------------------- paths differing only by case (case-sensitive FS)
+
+SKIP: {
+    skip 'case-insensitive filesystem', 5 unless $CASEFS;
+
+    mkdirs('work/Proj', 'work/proj');
+
+    seed('work/Proj', 'work/proj');
+    is(ncd('home', 'Proj'), 'work/Proj',
+        'an upper-case query picks the exact sibling, not its lower-case twin');
+
+    seed('work/proj', 'work/Proj');
+    is(ncd('home', 'proj'), 'work/proj',
+        'and a lower-case query picks the one seen most recently');
+
+    # both are distinct candidates: the rotation must visit them both
+    seed('work/Proj', 'work/proj');
+    my @both;
+    push @both, ncd('home', 'proj');
+    push @both, ncd('home', 'proj');
+    is_deeply([ sort @both ], [ 'work/Proj', 'work/proj' ],
+        'a case-insensitive query rotates over both twins');
+
+    # they must not collapse into one another in the history file
+    seed('work/Proj', 'work/proj');
+    ncd('home', 'Proj');
+    my @hh = history();
+    is(scalar(grep { $_ eq 'work/Proj' } @hh), 1, 'Proj kept in the history');
+    is(scalar(grep { $_ eq 'work/proj' } @hh), 1, 'proj kept alongside it');
+}
 
 seed('work/my-ncd-stuff');
 is(ncd('home', 'ncd'), 'work/my-ncd-stuff', 'substring fallback inside a name');
