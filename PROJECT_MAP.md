@@ -38,6 +38,11 @@ partage démonté ou un volume débranché ne doit pas effacer l'historique.
 Options : `-v` (liste les candidats), `-l` (affiche l'historique), `-h`,
 `-SWAPLAST [n]`.
 
+**Smart case** : un fragment tout en minuscules ignore la casse ; dès qu'il
+contient une majuscule, la recherche devient sensible à la casse (`$CASESENS`,
+fixé une fois pour toute l'exécution juste après la résolution de la requête).
+`ncd ncd` trouve `NCD_upper` **et** `ncd` ; `ncd NCD` ne trouve que `NCD_upper`.
+
 Flux principal :
 
 1. `read_history()` — lecture + `norm()` + dédoublonnage.
@@ -56,7 +61,7 @@ Fonctions :
 | Sub | Rôle |
 |---|---|
 | `norm` | supprime `\r\n` et le `/` final (sauf racine) |
-| `tier($comp,$q)` | rang 1..6 : exact → casse → préfixe → préfixe/i → sous-chaîne → sous-chaîne/i ; 0 = pas de match. Toujours `\Q…\E` |
+| `tier($comp,$q)` | rang 1..3 : exact → préfixe → sous-chaîne ; 0 = pas de match. Sensible à la casse ou non selon `$CASESENS`. Toujours `\Q…\E` |
 | `candidates($q)` | découpe chaque chemin en composants, fenêtre de `k` composants (`k` = segments de la requête, donc `ncd a/b` marche), tronque **juste après** le composant qui matche, `%best` dédoublonne. Tri : tier, puis récence, puis longueur |
 | `existing` | filtre les répertoires disparus (anneau `-SWAPLAST` uniquement), un message stderr par entrée |
 | `pick($idx,$cwd,@cand)` | avance sur **au plus un tour complet** ; renvoie le 1er candidat vivant ≠ cwd, à défaut le cwd, sinon `-1`. C'est le garde-fou anti-boucle |
@@ -72,10 +77,11 @@ Arguments quotés (`"$@"`). Si la sortie est vide, pas de `cd`.
 
 Tests `Test::More` en bac à sable (`tempdir` + `NCDfile`/`HOME` détournés).
 Lancer : `prove -v t/ncd.t`.
-46 tests. Couvre : priorité des tiers, troncature au bon composant, rotation
+52 tests. Couvre : priorité des tiers, troncature au bon composant, rotation
 (ordre, wrap, reset par une autre requête, reset par `ncs`), saut du cwd,
 `ncd .` / `ncd ..`, métacaractères regex (`a+b`, `x.y`), espaces, requête
-multi-segments, mise à jour de l'historique, répertoires disparus (écartés,
+multi-segments, smart case (minuscules → insensible, majuscule → sensible,
+échec assumé), mise à jour de l'historique, répertoires disparus (écartés,
 conservés par défaut, purgés avec `NCDautoremove`, sans perturber la rotation),
 cycle borné (tous les candidats morts, cache entièrement périmée),
 `NCDmax` défini/illimité, `-SWAPLAST` (toggle, `n`, clamp), sans argument,

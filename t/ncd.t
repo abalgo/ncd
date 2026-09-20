@@ -145,6 +145,31 @@ is(ncd('home', 'xqy'), 'xqy', 'no match: the query is echoed back for plain cd')
 seed('work/NCD_upper');
 is(ncd('home', 'ncd_up'), 'work/NCD_upper', 'case-insensitive prefix fallback');
 
+# ------------------------------------------------------------- smart case
+
+seed('work/projects/ncd', 'work/NCD_upper');
+is(ncd('home', 'ncd'), 'work/projects/ncd',
+    'an all-lower-case query ignores case: the exact component wins');
+
+seed('work/projects/ncd', 'work/NCD_upper');
+is(ncd('home', 'NCD'), 'work/NCD_upper',
+    'an upper-case letter forces case-sensitivity: lower-case ncd is not a match');
+
+seed('work/projects/ncd');
+is(ncd('home', 'NCD'), 'NCD',
+    'a case-sensitive query with no match falls back to a plain cd');
+
+seed('work/NCD_upper');
+is(ncd('home', 'NCD_upper'), 'work/NCD_upper', 'exact case-sensitive match');
+
+seed('work/NCD_upper');
+is(ncd('home', 'Upper'), 'Upper',
+    'case-sensitivity really bites: Upper does not match NCD_upper');
+
+seed('work/NCD_upper');
+is(ncd('home', 'upper'), 'work/NCD_upper',
+    'the same fragment in lower case does match it');
+
 seed('work/my-ncd-stuff');
 is(ncd('home', 'ncd'), 'work/my-ncd-stuff', 'substring fallback inside a name');
 

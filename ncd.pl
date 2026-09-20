@@ -21,6 +21,9 @@
 # Usage:
 #   ncd.pl [-v] [-l] <fragment>
 #   ncd.pl -SWAPLAST [n]
+#
+# Smart case: an all-lower-case fragment matches regardless of case; a fragment
+# containing an upper-case letter is matched case-sensitively.
 
 use strict;
 use warnings;
@@ -33,6 +36,7 @@ my $MAXHIST  = (defined $ENV{NCDmax} && $ENV{NCDmax} =~ /^\d+$/)
 my $AUTORM   = $ENV{NCDautoremove} ? 1 : 0;
 my $QUIET    = $ENV{NCDquiet}      ? 1 : 0;
 my $VERBOSE  = 0;
+my $CASESENS = 0;    # smart case: set when the query holds an upper-case letter
 
 my @hist;    # current history, most recent first (no trailing newlines)
 
@@ -128,14 +132,19 @@ sub write_mem {
 # --------------------------------------------------------------- matching
 
 # Rank a path component against the query.  Lower is better, 0 means no match.
+# Smart case: a query holding an upper-case letter is taken as deliberate and
+# matched case-sensitively; an all-lower-case query ignores case entirely.
 sub tier {
     my ($comp, $q) = @_;
-    return 1 if $comp eq $q;
-    return 2 if lc($comp) eq lc($q);
-    return 3 if $comp =~ /^\Q$q\E/;
-    return 4 if $comp =~ /^\Q$q\E/i;
-    return 5 if index($comp, $q) >= 0;
-    return 6 if $comp =~ /\Q$q\E/i;
+    if ($CASESENS) {
+        return 1 if $comp eq $q;
+        return 2 if $comp =~ /^\Q$q\E/;
+        return 3 if index($comp, $q) >= 0;
+        return 0;
+    }
+    return 1 if lc($comp) eq lc($q);
+    return 2 if $comp =~ /^\Q$q\E/i;
+    return 3 if $comp =~ /\Q$q\E/i;
     return 0;
 }
 
@@ -260,6 +269,9 @@ if ($swaplast) {
 }
 
 $query = $ENV{HOME} unless defined $query && length $query;
+
+# Smart case, decided once for the whole run.
+$CASESENS = ($query =~ /[[:upper:]]/) ? 1 : 0;
 
 # An existing directory always wins over a history lookup.
 if (-d $query) {

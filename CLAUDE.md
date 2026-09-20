@@ -3,6 +3,8 @@
 Outil de navigation : `ncd <fragment>` saute vers un répertoire déjà visité dont un
 composant du chemin matche le fragment ; répéter la commande fait tourner sur les
 autres correspondances. `ncs [n]` alterne entre les n derniers répertoires.
+Recherche en *smart case* : minuscules → insensible à la casse, une majuscule
+quelque part → sensible à la casse.
 
 Voir `PROJECT_MAP.md` pour l'architecture détaillée (ne pas la dupliquer ici).
 
