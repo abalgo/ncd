@@ -48,6 +48,10 @@ touchent jamais le `~/.ncdpath` réel. Ne jamais écrire de test qui s'en écart
   sinon le `cd` du shell casse. Sortie 1 + fragment renvoyé = « pas de match, tente un
   `cd` ordinaire ».
 - **`use strict; use warnings;`** en tête de tout script Perl du dépôt.
+- **L'état de rotation est global à l'utilisateur, volontairement.** Il vit dans
+  `$NCDfile.mem`, partagé par tous les terminaux — comme l'historique lui-même.
+  Ne pas le rendre par terminal (clé sur le PID, variable d'environnement
+  renvoyée par la fonction shell) : c'est un choix assumé, pas un oubli.
 - Toute regex construite à partir d'un chemin ou d'une requête utilisateur passe par
   `\Q…\E`.
 - Ne pas réintroduire les pièges listés en fin de `PROJECT_MAP.md`.

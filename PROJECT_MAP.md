@@ -97,6 +97,8 @@ historique vide.
   `%best`, `ne $cwd`) : sous Linux, `/a/Proj` et `/a/proj` sont deux répertoires.
   Seul `tier()` replie la casse, et seulement pour le match flou.
 - La rotation s'appuie sur le cache `.mem`, pas sur l'historique (qui bouge à chaque appel).
+- L'état de rotation (`.mem`) est **partagé par tous les terminaux**, au même titre
+  que l'historique. Décision explicite : ne pas l'isoler par shell.
 - Tout parcours de la liste de candidats est borné à un cycle (`for (1 .. $n)` dans
   `pick`) : jamais de `while` sur une condition qui peut ne jamais se réaliser.
 - L'historique n'est jamais amputé sans que l'utilisateur l'ait demandé
