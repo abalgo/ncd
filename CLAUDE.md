@@ -66,4 +66,8 @@ touchent jamais le `~/.ncdpath` réel. Ne jamais écrire de test qui s'en écart
 
 ## Git
 
-Dépôt local uniquement, pas de remote. Voir les préférences globales.
+Remote `origin` = `git@github-ncd:abalgo/ncd.git` (https://github.com/abalgo/ncd).
+`github-ncd` est un alias de `~/.ssh/config` qui utilise la deploy key dédiée
+`~/.ssh/id_ed25519_ncd` (la clé par défaut est la deploy key d'un autre dépôt).
+`master` local → `main` distant. Push uniquement sur demande explicite (voir les
+préférences globales).
