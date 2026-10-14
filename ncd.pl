@@ -21,6 +21,7 @@
 # Usage:
 #   ncd.pl [-v] [-l] <fragment>
 #   ncd.pl -SWAPLAST [n]
+#   ncd.pl --clean       move vanished directories to $NCDfile.missing
 #
 # Smart case: an all-lower-case fragment matches regardless of case; a fragment
 # containing an upper-case letter is matched case-sensitively.
@@ -31,6 +32,7 @@ use Cwd qw(abs_path getcwd);
 
 my $HISTFILE = $ENV{NCDfile} || (($ENV{HOME} || '.') . '/.ncdpath');
 my $MEMFILE  = "$HISTFILE.mem";
+my $MISSFILE = "$HISTFILE.missing";
 my $MAXHIST  = (defined $ENV{NCDmax} && $ENV{NCDmax} =~ /^\d+$/)
              ? $ENV{NCDmax} : 0;          # 0 = unlimited
 my $AUTORM   = $ENV{NCDautoremove} ? 1 : 0;
@@ -53,17 +55,6 @@ sub norm {
     return $p;
 }
 
-# Keep only the directories that still exist; report the others and move on.
-# They stay in the history file unless NCDautoremove is set.
-sub existing {
-    my @out;
-    for my $d (@_) {
-        if (-d $d) { push @out, $d }
-        else       { info "ncd: $d no longer exists, skipping\n" }
-    }
-    return @out;
-}
-
 sub uniq {
     my %seen;
     return grep { length($_) && !$seen{$_}++ } @_;
@@ -74,6 +65,7 @@ sub usage {
     print STDERR "       ncd.pl <fragment>        repeat to rotate through the other matches\n";
     print STDERR "       ncd.pl -SWAPLAST [n]     rotate among the n last directories (n=2)\n";
     print STDERR "       ncd.pl -l                list the history\n";
+    print STDERR "       ncd.pl --clean           move vanished directories to $MISSFILE\n";
     exit 0;
 }
 
@@ -241,7 +233,7 @@ sub finish {
 
 # -------------------------------------------------------------------- main
 
-my ($swaplast, $swapn, $list, $query);
+my ($swaplast, $swapn, $list, $clean, $query);
 my @argv = @ARGV;
 while (@argv) {
     my $x = shift @argv;
@@ -251,6 +243,7 @@ while (@argv) {
     }
     elsif ($x eq '-v' || $x eq '--verbose') { $VERBOSE = 1 }
     elsif ($x eq '-l' || $x eq '--list')    { $list    = 1 }
+    elsif ($x eq '--clean')                 { $clean   = 1 }
     elsif ($x eq '-h' || $x eq '--help')    { usage() }
     elsif (!defined $query)                 { $query   = $x }
     else                                    { $VERBOSE = 1 }    # legacy
@@ -265,14 +258,40 @@ if ($list) {
     exit 0;
 }
 
+if ($clean) {
+    # Explicit request: move the vanished directories out of the history into
+    # $MISSFILE, most recent first, so that nothing is lost for good.
+    my (@alive, @gone);
+    for my $d (@hist) { push @{ -d $d ? \@alive : \@gone }, $d }
+    if (@gone) {
+        my @old;
+        if (open(my $fh, '<', $MISSFILE)) { @old = map { norm($_) } <$fh>; close($fh) }
+        open(my $fh, '>', $MISSFILE) or die "ncd: cannot write $MISSFILE: $!\n";
+        print $fh map { "$_\n" } uniq(@gone, @old);
+        close($fh);
+        @hist = @alive;
+        write_history();
+    }
+    info "ncd: ", scalar(@gone), " vanished director", (@gone == 1 ? 'y' : 'ies'),
+         " moved to $MISSFILE, ", scalar(@alive), " kept\n";
+    print $cwd;
+    exit 0;
+}
+
 if ($swaplast) {
     # Ring over the last directories; $cwd is index 1, so the default n=2 is
-    # the equivalent of `cd -`.
-    my @ring = ($cwd, grep { $_ ne $cwd } @hist);
-    @ring = existing(@ring);
-    my $idx = $swapn - 1;
-    $idx = $#ring if $idx > $#ring;
-    $idx = 0      if $idx < 0;
+    # the equivalent of `cd -`.  The history is walked lazily and only until
+    # the n-th live entry: checking it whole would report every vanished
+    # directory it holds on each call.
+    my $want = $swapn > 0 ? $swapn - 1 : 0;
+    my @ring = ($cwd);
+    for my $d (@hist) {
+        last if @ring > $want;
+        next if $d eq $cwd;
+        if (-d $d) { push @ring, $d }
+        else       { info "ncd: $d no longer exists, skipping\n" }
+    }
+    my $idx = $want > $#ring ? $#ring : $want;
     # A swap is not a search: forget any pending rotation.
     finish($ring[$idx], [$cwd], '', 0, []);
 }

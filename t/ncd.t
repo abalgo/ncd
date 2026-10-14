@@ -58,6 +58,29 @@ sub history {
     return map { my $x = $_; $x =~ s/^\Q$ROOT\E\/?//; $x } @l;
 }
 
+sub missing {
+    open(my $fh, '<', "$HIST.missing") or return ();
+    my @l = <$fh>;
+    close($fh);
+    chomp @l;
+    return map { my $x = $_; $x =~ s/^\Q$ROOT\E\/?//; $x } @l;
+}
+
+# Like ncd(), with the messages enabled, and returns (stdout, stderr).
+sub ncd_err {
+    my @args = @_;
+    my $errfile = "$ROOT/.stderr";
+    delete local $ENV{NCDquiet};
+    open(my $save, '>&', \*STDERR) or die $!;
+    open(STDERR, '>', $errfile) or die $!;
+    my $out = ncd(@args);
+    open(STDERR, '>&', $save) or die $!;
+    open(my $fh, '<', $errfile) or die $!;
+    my $err = do { local $/; <$fh> };
+    close($fh);
+    return ($out, defined $err ? $err : '');
+}
+
 # Run ncd.pl from $cwd (relative to $ROOT) and return its stdout, relative to
 # $ROOT when it points inside the sandbox.
 sub ncd {
@@ -374,6 +397,51 @@ is(ncd('home', 'ncd'), 'work/projects/ncd', 'search before swap');
 ncd('work/projects/ncd', '-SWAPLAST');
 is(ncd('home', 'ncd'), 'work/projects/ncd',
     'a swap in between resets the rotation instead of advancing it');
+
+# ncs must only look as deep as it needs: a vanished entry past the n-th live
+# one is neither checked nor reported (regression: the whole history was).
+make_path("$ROOT/work/gone1", "$ROOT/work/gone2");
+seed('work/alpha', 'work/gone1', 'work/archive', 'work/gone2');
+rmdir "$ROOT/work/gone1";
+rmdir "$ROOT/work/gone2";
+{
+    my ($out, $err) = ncd_err('home', '-SWAPLAST');
+    is($out, 'work/alpha', 'ncs with vanished entries further down');
+    unlike($err, qr/gone/, 'ncs reports no vanished entry it did not need to look at');
+}
+{
+    my ($out, $err) = ncd_err('home', '-SWAPLAST', '3');
+    is($out, 'work/archive', 'ncs 3 skips the vanished entry in its way');
+    like($err, qr/gone1/, 'and reports the one it skipped');
+    unlike($err, qr/gone2/, 'but not the one beyond its reach');
+}
+
+# ------------------------------------------------------------------- --clean
+
+make_path("$ROOT/work/gone1", "$ROOT/work/gone2");
+seed('work/alpha', 'work/gone1', 'work/archive', 'work/gone2');
+rmdir "$ROOT/work/gone1";
+rmdir "$ROOT/work/gone2";
+unlink "$HIST.missing";
+is(ncd('home', '--clean'), 'home', '--clean stays in the current directory');
+is_deeply([ history() ], [ 'work/alpha', 'work/archive' ],
+    '--clean keeps the live entries, in order');
+is_deeply([ missing() ], [ 'work/gone1', 'work/gone2' ],
+    '--clean moves the vanished ones to .missing');
+
+make_path("$ROOT/work/gone3");
+seed('work/gone3', 'work/alpha');
+rmdir "$ROOT/work/gone3";
+open(my $missfh, '>>', "$HIST.missing") or die $!;
+print $missfh "$ROOT/work/gone3\n";
+close($missfh);
+ncd('home', '--clean');
+is_deeply([ missing() ], [ 'work/gone3', 'work/gone1', 'work/gone2' ],
+    'a second --clean prepends to .missing without duplicates');
+
+seed('work/alpha');
+ncd('home', '--clean');
+is_deeply([ history() ], ['work/alpha'], '--clean with nothing vanished is a no-op');
 
 # --------------------------------------------------------------- no argument
 

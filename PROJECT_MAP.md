@@ -27,6 +27,7 @@ quel pour un `cd` ordinaire).
 |---|---|
 | `$NCDfile` (déf. `~/.ncdpath`) | pile MRU, un chemin absolu par ligne, plus récent en tête |
 | `$NCDfile.mem` | L1 = dernière requête, L2 = index de rotation, L3+ = liste de candidats en cache |
+| `$NCDfile.missing` | répertoires disparus écartés par `--clean`, plus récents en tête |
 
 Env : `NCDfile` ; `NCDmax` (illimité si non défini) ; `NCDautoremove` (0 par
 défaut) ; `NCDquiet`.
@@ -35,7 +36,8 @@ Répertoire disparu : **toujours** signalé sur stderr et sauté, dans tous les 
 Il reste dans `.ncdpath` sauf si `NCDautoremove` est défini — un
 partage démonté ou un volume débranché ne doit pas effacer l'historique.
 
-Options : `-v` (liste les candidats), `-l` (affiche l'historique), `-h`,
+Options : `-v` (liste les candidats), `-l` (affiche l'historique), `--clean`
+(déplace les disparus vers `.missing`, stdout = cwd), `-h`,
 `-SWAPLAST [n]`.
 
 **Smart case** : un fragment tout en minuscules ignore la casse ; dès qu'il
@@ -46,7 +48,8 @@ fixé une fois pour toute l'exécution juste après la résolution de la requêt
 Flux principal :
 
 1. `read_history()` — lecture + `norm()` + dédoublonnage.
-2. `-SWAPLAST n` → anneau `($cwd, historique sans $cwd)`, index `n-1` borné. n=2 ≡ `cd -`.
+2. `-SWAPLAST n` → anneau `($cwd, historique sans $cwd)` parcouru **paresseusement** jusqu'au
+   n-ième vivant (seuls les disparus rencontrés sont signalés), index `n-1` borné. n=2 ≡ `cd -`.
    Remet la rotation à zéro.
 3. Fragment qui est un répertoire réel → `abs_path`, prioritaire sur l'historique.
 4. Requête identique à `.mem` L1 **et** cwd encore égal à la réponse précédente
@@ -64,7 +67,6 @@ Fonctions :
 | `norm` | supprime `\r\n` et le `/` final (sauf racine) |
 | `tier($comp,$q)` | rang 1..3 : exact → préfixe → sous-chaîne ; 0 = pas de match. Sensible à la casse ou non selon `$CASESENS`. Toujours `\Q…\E` |
 | `candidates($q)` | découpe chaque chemin en composants, fenêtre de `k` composants (`k` = segments de la requête, donc `ncd a/b` marche), tronque **juste après** le composant qui matche, `%best` dédoublonne. Tri : tier, puis récence, puis longueur |
-| `existing` | filtre les répertoires disparus (anneau `-SWAPLAST` uniquement), un message stderr par entrée |
 | `pick($idx,$cwd,@cand)` | avance sur **au plus un tour complet** ; renvoie le 1er candidat vivant ≠ cwd, à défaut le cwd, sinon `-1`. C'est le garde-fou anti-boucle |
 | `write_history(@promote)` | pousse les répertoires donnés en tête, dédoublonne ; purge si `NCDautoremove`, plafonne si `NCDmax` |
 | `read_mem`/`write_mem` | cache de rotation |
@@ -78,7 +80,7 @@ Arguments quotés (`"$@"`). Si la sortie est vide, pas de `cd`.
 
 Tests `Test::More` en bac à sable (`tempdir` + `NCDfile`/`HOME` détournés).
 Lancer : `prove -v t/ncd.t`.
-65 tests. Couvre : priorité des tiers, troncature au bon composant, rotation
+75 tests. Couvre : priorité des tiers, troncature au bon composant, rotation
 (ordre, wrap, reset par une autre requête, reset par `ncs`), saut du cwd,
 `ncd .` / `ncd ..`, métacaractères regex (`a+b`, `x.y`), espaces, requête
 multi-segments, smart case (minuscules → insensible, majuscule → sensible,
@@ -87,7 +89,7 @@ insensible), promotion à la sortie et non-promotion des candidats rejetés,
 mise à jour de l'historique, répertoires disparus (écartés,
 conservés par défaut, purgés avec `NCDautoremove`, sans perturber la rotation),
 cycle borné (tous les candidats morts, cache entièrement périmée),
-`NCDmax` défini/illimité, `-SWAPLAST` (toggle, `n`, clamp), sans argument,
+`NCDmax` défini/illimité, `-SWAPLAST` (toggle, `n`, clamp), `ncs` ne signale que les disparus sur son chemin, `--clean`, sans argument,
 historique vide.
 
 ## Invariants
@@ -104,7 +106,7 @@ historique vide.
 - Tout parcours de la liste de candidats est borné à un cycle (`for (1 .. $n)` dans
   `pick`) : jamais de `while` sur une condition qui peut ne jamais se réaliser.
 - L'historique n'est jamais amputé sans que l'utilisateur l'ait demandé
-  (`NCDautoremove`, `NCDmax`) : par défaut il ne fait que croître.
+  (`NCDautoremove`, `NCDmax`, `--clean`) : par défaut il ne fait que croître.
 - **Un répertoire est promu quand on le quitte**, jamais quand on l'atteint : c'est
   la seule preuve fiable qu'il a été accepté. Pendant une rotation, l'historique
   n'est pas touché du tout — le cwd y est un candidat que l'utilisateur vient de
@@ -123,3 +125,5 @@ historique vide.
   premier à la recherche suivante.
 - Recalculer les candidats entre deux appels d'une même requête → rotation qui piétine.
 - `$a` comme variable globale (réservée à `sort`) et interpolée brute en regex.
+- Vérifier tout l'historique dans `-SWAPLAST` (ancien `existing()`) → chaque `ncs`
+  liste tous les répertoires disparus de `.ncdpath`, des centaines sur un vieil historique.
