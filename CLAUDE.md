@@ -12,7 +12,7 @@ Voir `PROJECT_MAP.md` pour l'architecture détaillée (ne pas la dupliquer ici).
 
 - **CORE** : `ncd.pl`, `bashrc.inc` — toute modification ici impose de relancer les tests
 - **TESTS** : `t/ncd.t`
-- **DOC** : `PROJECT_MAP.md`, `CLAUDE.md`
+- **DOC** : `README.md` (GitHub, en anglais), `PROJECT_MAP.md`, `CLAUDE.md`
 - **IGNORE** : `.git/`, `~/.ncdpath*` (état runtime de l'utilisateur, hors dépôt)
 
 ## Commandes
